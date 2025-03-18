@@ -1,15 +1,17 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
 
 public class PlatformManager : MonoBehaviour
 {
-  private string loginURL = "https://play.dingdinghouse.com/api/users/login";
+  [SerializeField] private PlatformUIManager platformUIManager;
+  [SerializeField] internal bool loginSuccess = false;
+  private string baseURL = "https://play.dingdinghouse.com";
+  private string loginAPI = "/api/users/login";
 
   internal IEnumerator Login(string json){
     byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(json);
-    using (UnityWebRequest webRequest = new UnityWebRequest(loginURL, "POST"))
+    using (UnityWebRequest webRequest = new UnityWebRequest(baseURL+loginAPI, "POST"))
     {
         webRequest.uploadHandler = new UploadHandlerRaw(bodyRaw);
         webRequest.downloadHandler = new DownloadHandlerBuffer();
@@ -17,14 +19,9 @@ public class PlatformManager : MonoBehaviour
 
         yield return webRequest.SendWebRequest();
 
-        if (webRequest.result == UnityWebRequest.Result.ConnectionError || webRequest.result == UnityWebRequest.Result.ProtocolError)
-        {
-            Debug.LogError("Login API Error: " + webRequest.error);
-        }
-        else
-        {
-            Debug.Log("Login API Response: " + webRequest.downloadHandler.text);
-        }
+        Debug.Log("Login Response: " + webRequest.downloadHandler.text);
+        yield return platformUIManager.OnLoginResponse(webRequest.downloadHandler.text);  
     }
   }
+  
 }
