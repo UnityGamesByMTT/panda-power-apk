@@ -1,21 +1,30 @@
-using UnityEngine;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using TMPro;
 using UnityEngine.UI;
 using System;
 using System.Collections;
+using UnityEngine;
 using DG.Tweening;
 
 public class PlatformUIManager : MonoBehaviour
 {
   [SerializeField] private PlatformManager platformManager;
-  [SerializeField] private Image LoginResponseBGImage;
-  [SerializeField] private TMP_Text ResponseText;
+  [SerializeField] private Image BlackOverlayBgImage;
+  [SerializeField] private TMP_Text NotifText;
   [SerializeField] private TMP_InputField UsernameInputField;
   [SerializeField] private TMP_InputField PasswordInputField;
   [SerializeField] private Button LoginButton;
-  [SerializeField] private GameObject LoadingPage;
+  [SerializeField] internal GameObject LoadingPage;
+  [SerializeField] internal GameObject[] Pages;
+  [SerializeField] internal PlatformUIState State = PlatformUIState.Login;
+  internal enum PlatformUIState
+  {
+    Login,
+    Lobby,
+    Game,
+    Loading
+  }
 
   private void Awake()
   {
@@ -46,16 +55,56 @@ public class PlatformUIManager : MonoBehaviour
     else
     {
       Debug.LogError("Invalid username or password");
-      yield return ShowLoginResponse("Invalid username or password");
+      yield return ShowNotification("Invalid username or password");
     }
 
-    if(platformManager.loginSuccess)
-    {
-      //Begin socket connection and UI transition
-      LoadingPage.SetActive(true);
-    }
-    else{
+    if(string.IsNullOrEmpty(platformManager.userToken)){
       LoginButton.interactable = true;
+    }
+  }
+
+  internal void ConnectUser(){
+    if(!string.IsNullOrEmpty(platformManager.userToken) && !string.IsNullOrEmpty(platformManager.platformID)){
+      LoadingPage.SetActive(true);
+      platformManager.SetupPlatformSocketConnection();
+    }
+  }
+
+  internal void setState(string state){
+    switch(state){
+      case "login":
+        State = PlatformUIState.Login;
+        LoginButton.interactable = true;
+        UsernameInputField.text = "";
+        PasswordInputField.text = "";
+        break;
+      case "lobby":
+        State = PlatformUIState.Lobby;
+        break;
+      case "game":
+        State = PlatformUIState.Game;
+        break;
+      case "loading":
+        State = PlatformUIState.Loading;
+        break;
+    }
+    OpenPage();
+  }
+
+  void OpenPage(){
+    foreach(GameObject page in Pages){
+      page.SetActive(false);
+    }
+    switch(State){
+      case PlatformUIState.Login:
+        Pages[0].SetActive(true);
+        break;
+      case PlatformUIState.Lobby:
+        Pages[1].SetActive(true);
+        break;
+      case PlatformUIState.Loading:
+        Pages[3].SetActive(true);
+        break;
     }
   }
 
@@ -66,36 +115,43 @@ public class PlatformUIManager : MonoBehaviour
 
   internal IEnumerator OnLoginResponse(string response)
   {
-    string message;
+    string message=null;
+    string token=null;
     try
     {
       JObject jsonData = JObject.Parse(response);
       message= jsonData["message"]?.ToString();
+      token = jsonData["token"]?.ToString();
     }
     catch (Exception e)
     {
-      message = "Unknown error while extracting message from server.";
+      message = "Unknown error.";
+      token = "";
       Debug.LogError("Login response parse error: " + e.Message);
     }
     
-    yield return ShowLoginResponse(message);
-    
-    if(message.ToLower() == "login successful")
-    {
-      platformManager.loginSuccess = true;
+    if(message!=null){
+      yield return ShowNotification(message);
+      
+      if(message.ToLower() == "login successful")
+      {
+        platformManager.userToken = token;
+        PlayerPrefs.SetString("UserToken", token);
+        ConnectUser();
+      }
     }
   }
 
-  IEnumerator ShowLoginResponse(string response)
+  internal IEnumerator ShowNotification(string text)
   {
-    LoginResponseBGImage.raycastTarget = true;
-    ResponseText.text = response;
-    ResponseText.DOFade(0.7f, 0.5f);
-    yield return LoginResponseBGImage.DOFade(0.7f, 0.5f).WaitForCompletion();
+    BlackOverlayBgImage.raycastTarget = true;
+    NotifText.text = text;
+    NotifText.DOFade(0.7f, 0.5f);
+    yield return BlackOverlayBgImage.DOFade(0.7f, 0.5f).WaitForCompletion();
     yield return new WaitForSeconds(1.5f);
-    ResponseText.DOFade(0f, 0.5f);
-    yield return LoginResponseBGImage.DOFade(0f, 0.5f).WaitForCompletion();
-    LoginResponseBGImage.raycastTarget = false;
+    NotifText.DOFade(0f, 0.5f);
+    yield return BlackOverlayBgImage.DOFade(0f, 0.5f).WaitForCompletion();
+    BlackOverlayBgImage.raycastTarget = false;
   }
 }
 
